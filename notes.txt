@@ -1,0 +1,83 @@
+From Evaluation report (Wong, Hefferman, 2009)
+
+Success or otherwise of last round
+
+300 E. coli/E. faecalis/facium were doable from all animal groups. However, individual targets per plant
+was not possible. This may be practical issue: NMD requires 5 carcass swabs which were the source
+of isolates, so only frequency of submission could be altered.
+
+300 isolates of campy were available, targeted to poultry. Major shortfalls in young calves and pigs (56, 11 resp)
+possibly due to low prevalence on carcass contam? More isolates owuld need higher sampling frequency or longer
+collection.
+
+Salmonella well below target (19,6,3 for young calvs, pigs, poultry). Too low for meaningful analysis.
+
+Some issues with MIC.
+
+Sampling scheme last time:
+
+Poultry: NMD selects 3 carcass for rinshing each day. In VLT plants, 5 per week.
+
+VLT: Quarterly (3 of 5 carcasses).
+
+LAS had to submit Campy culture from each carcass rinsate (3 of them) that were positive, an E. coli Petrifilm
+from each carcass rinsate containing blue colonies, and residual rinsate.
+
+VYC and pigs: 5 carcasses swabbed 3 sites. Campy+Enterococcus from composite rinsate of 3 swabs. E. coli from carcass
+from just one of 3 sites (one petrifilm per carcass).
+
+This round:
+
+Which animal groups? From "Monitoring and surveillance appendix 1 (2?)" it suggests dairy, beef feedlot, beef pasture, veal calves, pig, chickens.
+
+Salmonella, Campy, E. coli, Enterococci. NMD tags as cow, prime, bull. Prime and veal recommended.
+
+Last orund:
+
+300 isolates, 75 per quarter of each Cmapy, E. coli and Enterococci (equal numbers of faecalis/faecium if poss) from VYC, Pigs, Poultry. Sampled proportional to throughput. Numbers made up from another quarter if not met, other plants if possible at end of survey. Exception was VYC due to seasonality (i.e. samples loaded to quarter that processing happens).
+
+Salmonella taken directly from NMD as part of usual processing.
+
+RESULTS FROM LAST ROUND. Data is in /data folder. We don't have per-plant prevalence of resistance for each type,
+but we do have how the sample collection went, which we can use for prevalence per plant of each species so
+we can determine whether they're the same or not I guess. How would this help? Well it would contribute to the
+estimate of prevalence of each species, so give an idea of total sample numbers required to collect however many
+isolates are needed. I guess a separate sample size computation could then be done to compare back to the 2009
+study?? i.e. if we have N2 campy isolates from this study, and N1 from previous, and P1 prevalence in previous, how
+large does N2 have to be before we can detect a difference between P2 and P1?
+
+(Sidenote: If prevalence of resistance is clustered by plant, then we'd need to know this... Does Helen have data
+spreadsheet from previous study?)
+
+Refs from Petra's Gap Analysis: (Pleydell et al., 2010; Heffernan et al., 2011; MoH/ESR, 2013)
+
+Sample size stuff from "Schedule 4 NZFSA AMR RFT 2009":
+
+400 was based on 50% prevalence and a +/-5% precision at 95% confidence.
+
+Ecoli prevalence from NMD: Based on previous 12 month E. coli results 1565 fresh dressed, prevalence 85%. 440 isolates requested using 10% additional (this will be where 330 comes from in final contract adjustment).  Poultry was 91% prevalence (3381/3727) washes. Pigs was unknown.
+
+Enterrococci: No data avail, but suggested 40% of NMD carcass samples would be positive -> 1000 samples. Pigs, again
+unknown, so 1000 carcasses for 400 isolates. Poultry suggests 68% positive, so 600 samples for 400 isolates.
+
+Salmonella: 66 positive carcases total. Maximum likely sample size is 100.
+
+Campy: 10% prev estimated on retail -> request every young calf carcass (approx 1570). Pigs: 9% prev -> every pig carcass from NMD needed (approx 2600 of them). Poultry: 28% of 4689 rinse samples. Extra 25% to cover: 500 isoaltes requested.
+
+Questions they want answered:
+
+1. Sample size and suggested frequency.
+
+2. Monthly last time - could it be quarterly this time (Not sure what this refers to - it seems last one was quarterly???)
+
+3. What number of samples would be need to compare to 2009? This will need prevalence info from 2009. If things
+are clustered per abattoir, this could mean our prevalence uncertainties are a bit off. Does Helen or someone have
+data on prevalence per plant of resistance??
+
+4. Do low-throughput plants need to be included? Depends on whether prevalence of bugs are clustered (probably
+not too much?) and whether prevalence of resistance is clustered by plant (no data on this).
+
+
+Which plants map to which? ATM I don't have this. It possibly doesn't matter too much though.
+e.g. I can compare throughput form the ones I have to the data I have this year...
+
