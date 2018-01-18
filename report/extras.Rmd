@@ -1,0 +1,39 @@
+---
+title: "Additional report stuff"
+author: "Jonathan Marshall"
+date: "18 January 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+prev2009 <- read.csv("../data/2009_sample_size_calcs.csv")
+```
+
+## Samples required for isolates
+
+Overall prevalence for each genus from the 2009 survey is shown below.
+
+```{r}
+prev2009 %>%
+  select(Animal, Genus, CI) %>%
+  spread(Genus, CI) %>%
+  kable
+```
+
+Given these prevalences, the corresponding sample size required to produce 300 isolates for each genus is given below, computed using the 25th percentile of estimated prevalence from the 2009 survey to ensure we're 75% likely to get the required number of isolates. As can be seen, the sample sizes required for Campylobacter on non-poultry sources are infeasible.
+
+```{r}
+prev2009 %>%
+  select(Animal, Genus, Samples) %>%
+  spread(Genus, Samples) %>%
+  kable
+```
+
+## Sampling frequency
+
+If isolates are exclusively sourced from NMD, then the samples available are at most weekly (15 carcass samples per week) for beef, and daily for poultry (Table 1). To achieve a sampling plan where samples are in proportion to throughput, the 2009 survey sampled plants at different frequencies (as samples in NMD are fixed and do not alter based on throughput), ranging from weekly through to monthly, so that approximately 75 isolates per quarter were available in total. 
+
+An alternate scheme may be to request laboratories perform the additional testing on a given number of samples per plant per quarter, though the logistics of this will need to be considered. It may be possible to store isolates per quarter and then select for additional testing?
