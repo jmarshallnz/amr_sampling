@@ -1,30 +1,83 @@
 library(dplyr)
 library(tidyr)
 library(stringr)
+library(forcats)
+
+fix_ecoli <- function(x) {
+  x <- str_replace_all(tolower(x), " ", "")
+  ifelse(x == 'notdone', 'nottested', x)
+}
+
+fix_entero <- function(x) {
+  x <- str_replace_all(tolower(x), " ", "")
+  fct_collapse(x, speciated = c("e.faecalis", "e.faecium"))
+}
 
 # using the AMR data directly...
 bobby <- read.csv("data/esr/Bobby details.csv", skip = 1, stringsAsFactors = FALSE) %>%
   extract(PHL.Sample.Number, into='CPH.No.', regex="CPH[0]*([0-9A-B]+)", convert=FALSE) %>%
-  select(CPH.No., Date.Sampled, Quarter, NMD.Code, Campy.PCR) %>%
-  mutate(Animal="Calves", Campy.PCR=str_replace_all(Campy.PCR, " ", ""))
+  select(CPH.No., Sample.Type, Date.Sampled, Quarter, NMD.Code, Campy.PCR, E.coli=Confirmed.E..coli.Result, Entero=Confirmed.Enterococcus.Result) %>%
+  mutate(Animal="Calves", Campy.PCR=str_replace_all(Campy.PCR, " ", ""),
+         E.coli=fix_ecoli(E.coli),
+         Entero=fix_entero(Entero))
 
 porcine <- read.csv("data/esr/Porcine details.csv", skip = 1, stringsAsFactors = FALSE) %>%
   extract(PHL.Sample.Number, into='CPH.No.', regex="CPH[0]*([0-9A-B]+)", convert=FALSE) %>%
-  select(CPH.No., Date.Sampled, Quarter, NMD.Code, Campy.PCR) %>%
-  mutate(Animal="Pigs", Campy.PCR=str_replace_all(Campy.PCR, " ", ""))
+  select(CPH.No., Sample.Type, Date.Sampled, Quarter, NMD.Code, Campy.PCR, E.coli=Confirmed.E..coli.Result) %>%
+  rename() %>%
+  mutate(Animal="Pigs", Campy.PCR=str_replace_all(Campy.PCR, " ", ""),
+         E.coli=fix_ecoli(E.coli),
+         Entero=fix_entero(Entero))
 
 poultry <- read.csv("data/esr/Poultry details.csv", skip = 1, stringsAsFactors = FALSE) %>%
   extract(PHL.Sample.Number, into='CPH.No.', regex="CPH[0]*([0-9A-B]+)", convert=FALSE) %>%
-  select(CPH.No., Date.Sampled, Quarter, NMD.Code, Campy.PCR = Confirmed..PCR.) %>%
-  mutate(Animal="Poultry", Campy.PCR=str_replace_all(Campy.PCR, " ", ""))
+  select(CPH.No., Sample.Type, Date.Sampled, Quarter, NMD.Code, Campy.PCR = Confirmed..PCR., E.coli=Confirmed.E..coli.Result, Entero=Confirmed.Enterococcus.Result) %>%
+  mutate(Animal="Poultry", Campy.PCR=str_replace_all(Campy.PCR, " ", ""),
+         E.coli=fix_ecoli(E.coli),
+         Entero=fix_entero(Entero))
 
-produce <- read.csv("data/esr/Produce details.csv", stringsAsFactors = FALSE) %>%
-  extract(PHL.Sample.Number, into='CPH.No.', regex="CPH[0]*([0-9A-B]+)", convert=FALSE) %>%
-  mutate(Quarter = NA, NMD.Code = NA, Campy.PCR = NA) %>%
-  select(CPH.No., Date.Sampled = Date.Received, Quarter, NMD.Code, Campy.PCR) %>%
-  mutate(Animal="Produce", Campy.PCR=str_replace_all(Campy.PCR, " ", ""))
-  
-animals <- bind_rows(bobby, porcine, poultry, produce)
+animals <- bind_rows(bobby, porcine, poultry)
+
+# figure out prevalences. E.coli first
+animals %>% filter(Sample.Type == "E. coli Petrifilm") %>%
+  group_by(Animal) %>%
+  summarize(TotalSamples=n(), Tested=sum(E.coli != 'nottested'), Positive=sum(E.coli == 'e.coli'))
+
+# Campy
+animals %>% filter(Sample.Type %in% c("Campy in Bolton", "Campy swab")) %>%
+  mutate(Campy.PCR = fct_collapse(Campy.PCR, Campylobacter = c("C.coli", "C.jejuni", "C.jejuni/C.coli"))) %>%
+  group_by(Animal) %>%
+  summarize(TotalSamples=n(), Tested=sum(Campy.PCR != 'nottested'), Positive=sum(Campy.PCR == 'Campylobacter'))
+
+# Enterococcus
+animals %>% filter(Sample.Type == "Entero in MRD") %>%
+  group_by(Animal) %>%
+  summarize(TotalSamples=n(), Tested=sum(Entero != 'nottested'), Positive=sum(Entero == 'speciated'))
+
+# OK, write out the file for modelling
+all <- animals %>% rename(Plant = NMD.Code) %>%
+  mutate(Campy.PCR = fct_collapse(Campy.PCR, Campylobacter = c("C.coli", "C.jejuni", "C.jejuni/C.coli")),
+         Plant = str_replace_all(Plant, " ", ""))
+
+ec <- all %>% filter(Sample.Type == "E. coli Petrifilm") %>%
+  group_by(Plant, Animal, Quarter) %>%
+  summarize(Total=n(), Samples=sum(E.coli != 'nottested'), Isolates=sum(E.coli == 'e.coli')) %>%
+  mutate(Genus = "E.coli")
+
+# Campy
+ca <- all %>% filter(Sample.Type %in% c("Campy in Bolton", "Campy swab")) %>%
+  group_by(Plant, Animal, Quarter) %>%
+  summarize(Total=n(), Samples=sum(Campy.PCR != 'nottested'), Isolates=sum(Campy.PCR == 'Campylobacter')) %>%
+  mutate(Genus = "Campylobacter")
+
+# Enterococcus
+en <- all %>% filter(Sample.Type == "Entero in MRD") %>%
+  group_by(Plant, Animal, Quarter) %>%
+  summarize(Total=n(), Samples=sum(Entero != 'nottested'), Isolates=sum(Entero == 'speciated')) %>%
+  mutate(Genus = "Enterococci")
+
+ps_out <- rbind(ec, ca, en)
+write.csv(ps_out, "data/plant_prev_for_model.csv", row.names=FALSE)
 
 mb_esc <- read.csv("data/esr/mbrothesc.csv")[,1:19] %>%
   gather(Antimicrobial, MIC, -CPH.No.) %>% mutate(Species='E.coli')
