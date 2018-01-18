@@ -108,7 +108,58 @@ ggplot(stan_out3 %>% filter(Samples > 0) %>% mutate(Throughput = ifelse(Target <
   scale_x_continuous(breaks=NULL) +
   scale_fill_manual(values=c("white", "black"))
 
+
+
+# try and predict the overall prevalence directly
+pred1 <- plogis(
+  posterior_linpred(mstan, newdata=data.frame(Animal = levels(dat$Animal)), re.form=~0))
+prev1 <- data.frame(Animal=levels(dat$Animal),
+                    t(apply(pred1, 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
+  rename(LI = `X2.5.`,
+         LC = `X25.`,
+         M = `X50.`,
+         UC = `X75.`,
+         UI = `X97.5.`)
+pred2 <- plogis(
+  posterior_linpred(mstan2, newdata=data.frame(Animal = levels(dat$Animal)), re.form=~0))
+prev2 <- data.frame(Animal=levels(dat$Animal),
+                    t(apply(pred2, 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
+  rename(LI = `X2.5.`,
+         LC = `X25.`,
+         M = `X50.`,
+         UC = `X75.`,
+         UI = `X97.5.`)
+pred3 <- plogis(
+  posterior_linpred(mstan3, newdata=data.frame(Animal = levels(dat$Animal)), re.form=~0))
+prev3 <- data.frame(Animal=levels(dat$Animal),
+                    t(apply(pred3, 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
+  rename(LI = `X2.5.`,
+         LC = `X25.`,
+         M = `X50.`,
+         UC = `X75.`,
+         UI = `X97.5.`)
+
+# Table them up for the report
+prev2009 <- rbind(prev1 %>% mutate(Genus='E. coli'),
+      prev2 %>% mutate(Genus='Campylobacter'),
+      prev3 %>% mutate(Genus='Enterococcus')) %>%
+  mutate(CI = sprintf("%.1f (%.1f, %.1f)", M*100, LI*100, UI*100)) %>%
+  mutate(Samples = signif(300 / LC, 2))
+
+write.csv(prev2009, "data/2009_sample_size_calcs.csv", row.names=FALSE)
+
+
+
+
+
+
+
+
+
+
 # Now look at prevalance of each type among the thingees
+
+
 
 
 
