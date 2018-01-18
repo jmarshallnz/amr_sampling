@@ -10,6 +10,9 @@ library(dplyr)
 library(knitr)
 knitr::opts_chunk$set(echo = TRUE)
 prev2009 <- read.csv("../data/2009_sample_size_calcs.csv")
+dat2017 <- read.csv("../data/2017_nmd_prev.csv") %>%
+  mutate(Prevalence = round(Positives/Samples * 100, 1)) %>%
+  select(Animal, Genus, Date, Samples, Positives, Prevalence)
 ```
 
 ## Samples required for isolates
@@ -23,7 +26,21 @@ prev2009 %>%
   kable
 ```
 
-Given these prevalences, the corresponding sample size required to produce 300 isolates for each genus is given below, computed using the 25th percentile of estimated prevalence from the 2009 survey to ensure we're 75% likely to get the required number of isolates. As can be seen, the sample sizes required for Campylobacter on non-poultry sources are infeasible.
+As noted earlier, the per-plant prevalences of each bacterial species represent true prevalences only for *Enterococcus* across all animal groups, and *Campylobacter* for very young calves and pigs. The *E.coli* results for all animal groups, and *Campylobacter* results for poultry are both conditional on an NMD positive sample being sent for additional isolation.
+
+To assess true prevalence, and thus estimate sample sizes, additional data, including *Salmonella*, was obtained from the NMD (Gail Duncan, pers comm) for the 3rd quarter of 2017 and is presented below. Note the low prevalence in general of Salmonella, and the lower prevalence of E. coli among adult cattle.
+
+```{r}
+dat2017 %>% kable
+```
+
+Combining these NMD results with the prevalence data (which represents the likely success of obtaining an isolate given an NMD positive) from the 2009 study yields the following estimates of prevalence.
+
+# TODO: Multiply up the prevalences. Ideally would combine uncertainty from the NMD prevalence with that from survey prevalence. Guess that'd be easy enough if we just
+bootstrap a heap? i.e. sample prevalence from prevalance distro + posterior from 2009 to get updated posterior. Trouble is we don't have posterior anymore, so need to dump that as well instead of just the summaries.
+
+
+The corresponding sample size required to produce 300 isolates for each genus is given below, computed using the 25th percentile of estimated prevalence from the 2009 survey to ensure we're 75% likely to get the required number of isolates. As can be seen, the sample sizes required for Campylobacter on non-poultry sources are infeasible.
 
 ```{r}
 prev2009 %>%

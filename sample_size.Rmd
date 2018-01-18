@@ -2,8 +2,8 @@
 title: "Sample size considerations for antimicrobial resistance study"
 author: "Jonathan Marshall"
 output:
-  word_document: default
   html_document: default
+  word_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -11,7 +11,9 @@ library(dplyr)
 library(ggplot2)
 library(forcats)
 knitr::opts_chunk$set(echo = FALSE)
-prev <- read.csv("data/fitted_prevalence.csv")
+prev <- read.csv("data/fitted_prevalence.csv") %>%
+  mutate(Animal=fct_recode(Animal, Pigs='Pigs', Poultry='Poultry', `Very young calves`='Calves'), Animal=fct_relevel(Animal, c("Pigs", "Poultry")))
+
 resist <- read.csv("data/fitted_resistance.csv") %>%
   left_join(read.csv("data/esr/resistance.csv") %>% select(Antimicrobial, Name)) %>%
   mutate(Animal=fct_recode(Animal, Pigs='Pigs', Poultry='Poultry', `Very young calves`='Calves'), Animal=fct_relevel(Animal, c("Pigs", "Poultry")))
@@ -53,11 +55,13 @@ ggplot(prev %>% filter(Samples > 0) %>% mutate(Throughput = ifelse(Target <= 6, 
   guides(col=guide_legend(title=NULL)) +
   theme_bw() + ylab("Prevalence") +
   scale_y_continuous(labels=scales::percent_format()) +
-  scale_x_continuous(breaks=NULL) +
+  scale_x_discrete(breaks=NULL) +
   scale_fill_manual(values=c("white", "black"))
 ```
 
-As can be seen, there is some evidence for prevalence of each bacterial species varying across plants, though there is little evidence that those plants with low throughput differ markedly from those with higher throughput. As expected, the main differences are by processing type, with higher prevalences of all bacterial species on poultry processors compared to pig and calf processors. In particular, there were low rates of *Campylobacter* in both pig and calf processors, meaning few isolates were available for antimicrobial testing.
+As can be seen, there is some evidence for prevalence of each bacterial species varying across plants, though there is little evidence that those plants with low throughput differ markedly from those with higher throughput. As expected, the main differences are by processing type, with higher prevalences of all bacterial species on poultry processors compared to pig and calf processors.
+
+It should be noted, however, that these prevalences are conditional on the sample type, and are thus not in all cases comparable across species. *E.coli* prevalence here is prevalence conditional on an *E.coli* petrifilm being obtained first (i.e. a positive result in NMD), and thus does not represent prevalence on carcass, which will be lower. Further, the *Campylobacter* result for poultry is conditional on a mCCDA presumptive positive in NMD, and thus carcass prevalence will be lower. All other results are direct from carcass rinsates, and hence represent true prevalences.
 
 ### Antimicrobial resistance from the 2009 baseline study
 
