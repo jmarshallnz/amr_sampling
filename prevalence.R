@@ -50,17 +50,30 @@ ggplot(prev, aes(x=Plant, y=Prevalence)) + geom_col() + facet_grid(Genus~Animal,
 #ecoli <- prev %>% filter(Genus == "E.coli")
 #mod <- glmer(cbind(Isolates, Samples-Isolates) ~ Animal + (1|Plant), family='binomial', data=ecoli)
 
+# FINISH HIM! New, corrected prevalences
+plant_info <- read.csv("data/2009_plan.csv", na.strings="") %>% tidyr::fill("Genus", "Animal") %>%
+  select(Plant, Throughput, Target) %>% unique
+
+plant_correct <- read.csv("data/plant_prev_for_model.csv") %>%
+  left_join(plant_info, by="Plant") %>% filter(!is.na(Target))
+
+prev <- plant_correct %>% group_by(Plant, Genus) %>%
+  summarize(Samples = sum(Samples, na.rm=TRUE), Isolates = sum(Isolates, na.rm=TRUE), Prevalence = Isolates/Samples*100) %>%
+  left_join(plant_correct %>% select(Plant, Target, Animal) %>% unique) %>%
+  ungroup %>%
+  mutate(Plant = paste(Animal, Plant))
+
 dat <- prev %>% filter(Genus == "E.coli")
 mstan <- stan_glmer(cbind(Isolates, Samples-Isolates) ~ Animal + (1|Plant), family='binomial',
                     data=dat)
-stan_out <- data.frame(Plant=1:43, t(apply(posterior_predict(mstan), 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
+stan_out <- data.frame(Plant=dat$Plant, t(apply(posterior_predict(mstan), 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
   left_join(dat) %>% mutate(LI = `X2.5.`/Samples,
                               LC = `X25.`/Samples,
                               M = `X50.`/Samples,
                               UC = `X75.`/Samples,
                               UI = `X97.5.`/Samples)
 lin_out <- plogis(posterior_linpred(mstan))
-stan_out <- data.frame(Plant=1:43, t(apply(lin_out, 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
+stan_out <- data.frame(Plant=dat$Plant, t(apply(lin_out, 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
   left_join(dat) %>% rename(LI = `X2.5.`,
                              LC = `X25.`,
                              M = `X50.`,
@@ -73,20 +86,20 @@ ggplot(stan_out %>% filter(Samples > 0) %>% mutate(Throughput = ifelse(Target <=
   guides(col=guide_legend(title=NULL)) +
   theme_bw() + ylab("E.coli prevalence") +
   scale_y_continuous(labels=scales::percent_format()) +
-  scale_x_continuous(breaks=NULL) +
+  scale_x_discrete(breaks=NULL) +
   scale_fill_manual(values=c("white", "black"))
 
 dat2 <- prev %>% filter(Genus == "Campylobacter")
 mstan2 <- stan_glmer(cbind(Isolates, Samples-Isolates) ~ Animal + (1|Plant), family='binomial',
                      data=dat2)
-stan_out2 <- data.frame(Plant=1:43, t(apply(posterior_predict(mstan2), 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
+stan_out2 <- data.frame(Plant=dat2$Plant, t(apply(posterior_predict(mstan2), 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
   left_join(dat2) %>% mutate(LI = `X2.5.`/Samples,
                               LC = `X25.`/Samples,
                               M = `X50.`/Samples,
                               UC = `X75.`/Samples,
                               UI = `X97.5.`/Samples)
 lin_out2 <- plogis(posterior_linpred(mstan2))
-stan_out2 <- data.frame(Plant=1:43, t(apply(lin_out2, 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
+stan_out2 <- data.frame(Plant=dat2$Plant, t(apply(lin_out2, 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
   left_join(dat2) %>% rename(LI = `X2.5.`,
                              LC = `X25.`,
                              M = `X50.`,
@@ -99,20 +112,20 @@ ggplot(stan_out2 %>% filter(Samples > 0) %>% mutate(Throughput = ifelse(Target <
   guides(col=guide_legend(title=NULL)) +
   theme_bw() + ylab("Campylobacter prevalence") +
   scale_y_continuous(labels=scales::percent_format()) +
-  scale_x_continuous(breaks=NULL) +
+  scale_x_discrete(breaks=NULL) +
   scale_fill_manual(values=c("white", "black"))
 
 dat3 <- prev %>% filter(Genus == "Enterococci")
 mstan3 <- stan_glmer(cbind(Isolates, Samples-Isolates) ~ Animal + (1|Plant), family='binomial',
                      data=dat3)
-stan_out3 <- data.frame(Plant=1:43, t(apply(lin_out3, 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
+stan_out3 <- data.frame(Plant=dat3$Plant, t(apply(lin_out3, 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
   left_join(dat3) %>% mutate(LI = `X2.5.`/Samples,
                              LC = `X25.`/Samples,
                              M = `X50.`/Samples,
                              UC = `X75.`/Samples,
                              UI = `X97.5.`/Samples)
 lin_out3 <- plogis(posterior_linpred(mstan3))
-stan_out3 <- data.frame(Plant=1:43, t(apply(lin_out3, 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
+stan_out3 <- data.frame(Plant=dat3$Plant, t(apply(lin_out3, 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
   left_join(dat3) %>% rename(LI = `X2.5.`,
                              LC = `X25.`,
                              M = `X50.`,
@@ -125,7 +138,7 @@ ggplot(stan_out3 %>% filter(Samples > 0) %>% mutate(Throughput = ifelse(Target <
   guides(col=guide_legend(title=NULL)) +
   theme_bw() + ylab("Enterococci prevalence") +
   scale_y_continuous(labels=scales::percent_format()) +
-  scale_x_continuous(breaks=NULL) +
+  scale_x_discrete(breaks=NULL) +
   scale_fill_manual(values=c("white", "black"))
 
 
@@ -181,6 +194,8 @@ write.csv(prev2009, "data/2009_sample_size_calcs.csv", row.names=FALSE)
 all <- bind_rows(stan_out, stan_out2, stan_out3)
 
 write.csv(all, "data/fitted_prevalence.csv", row.names=FALSE)
+
+
 ggplot(all %>% filter(Samples > 0) %>% mutate(Throughput = ifelse(Target <= 6, "Low", "High"))) +
   geom_segment(aes(x=Plant, xend=Plant, y=LI, yend=UI)) +
   geom_segment(aes(x=Plant, xend=Plant, y=LC, yend=UC, col=Animal), size=2) +
@@ -189,7 +204,7 @@ ggplot(all %>% filter(Samples > 0) %>% mutate(Throughput = ifelse(Target <= 6, "
   guides(col=guide_legend(title=NULL)) +
   theme_bw() + ylab("Prevalence") +
   scale_y_continuous(labels=scales::percent_format()) +
-  scale_x_continuous(breaks=NULL) +
+  scale_x_discrete(breaks=NULL) +
   scale_fill_manual(values=c("white", "black"))
 
 
