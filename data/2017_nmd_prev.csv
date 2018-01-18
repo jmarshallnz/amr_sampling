@@ -1,0 +1,8 @@
+Animal,Genus,Samples,Positives,Date,Notes
+Adult beef,Salmonella,170,2,Oct – Dec,850 carcasses sampled from Oct 2017 – Dec 2017. Composite sample of 5 carcasses each sampled in 3 sites.
+Very young calves,Salmonella,228,15,Mar – Nov,1140 carcasses sampled from Mar 2017 – Nov 2017. Composite sample of 5 carcasses each sampled in 3 sites.
+Poultry,Salmonella,1654,1,Jan – Sept,
+Adult beef,E. coli,1260,126,Jul – Sept,
+Very young calves,E. coli,1500,1185,Jul – Sept,
+Pigs,E. coli,385,100,Jul – Sept,
+Poultry,Campylobacter,1723,310,Jul – Sept,
