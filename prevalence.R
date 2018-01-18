@@ -1,5 +1,8 @@
 library(dplyr)
 library(tidyr)
+library(ggplot2)
+library(lme4)
+library(rstanarm)
 
 # read in the prevalence data and tidy
 total_samples <- read.csv("data/tabula-Heffernan_table01.csv", na.strings=c("NA", "NA3"))[,-1]
@@ -37,19 +40,15 @@ prev <- plant_samples %>% group_by(Plant, Genus) %>%
   summarize(Samples = sum(Samples, na.rm=TRUE), Isolates = sum(Isolates, na.rm=TRUE), Prevalence = Isolates/Samples*100) %>%
   left_join(plant_samples %>% select(Plant, Target, Animal, Island) %>% unique)
 
-library(ggplot2)
 ggplot(prev, aes(x=Plant, y=Prevalence)) + geom_col() + facet_grid(Genus~Animal, scales = 'free_x')
 
 # fit a GLMER to the data
-library(lme4)
-glmer(cbind(Isolates, Samples-Isolates) ~ Genus*Animal + (1|Plant), family='binomial', data=prev)
-mod <- glmer(cbind(Isolates, Samples-Isolates) ~ Animal + (1|Plant), family='binomial', data=subset(prev, Genus == "E.coli"))
-boots <- lme4::bootMer(mod, function(x) { predict(x, re.form=NULL) }, nsim=100, use.u=FALSE, type="parametric")
+#mod <- glmer(cbind(Isolates, Samples-Isolates) ~ Animal + (1|Plant), family='binomial', data=subset(prev, Genus == "E.coli"))
+#boots <- lme4::bootMer(mod, function(x) { predict(x, re.form=NULL) }, nsim=100, use.u=FALSE, type="parametric")
 
 # try stan!
-library(rstanarm)
-ecoli <- prev %>% filter(Genus == "E.coli")
-mod <- glmer(cbind(Isolates, Samples-Isolates) ~ Animal + (1|Plant), family='binomial', data=ecoli)
+#ecoli <- prev %>% filter(Genus == "E.coli")
+#mod <- glmer(cbind(Isolates, Samples-Isolates) ~ Animal + (1|Plant), family='binomial', data=ecoli)
 
 dat <- prev %>% filter(Genus == "E.coli")
 mstan <- stan_glmer(cbind(Isolates, Samples-Isolates) ~ Animal + (1|Plant), family='binomial',
@@ -60,6 +59,13 @@ stan_out <- data.frame(Plant=1:43, t(apply(posterior_predict(mstan), 2, quantile
                               M = `X50.`/Samples,
                               UC = `X75.`/Samples,
                               UI = `X97.5.`/Samples)
+lin_out <- plogis(posterior_linpred(mstan))
+stan_out <- data.frame(Plant=1:43, t(apply(lin_out, 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
+  left_join(dat) %>% rename(LI = `X2.5.`,
+                             LC = `X25.`,
+                             M = `X50.`,
+                             UC = `X75.`,
+                             UI = `X97.5.`)
 ggplot(stan_out %>% filter(Samples > 0) %>% mutate(Throughput = ifelse(Target <= 6, "Low", "High"))) +
   geom_segment(aes(x=Plant, xend=Plant, y=LI, yend=UI)) +
   geom_segment(aes(x=Plant, xend=Plant, y=LC, yend=UC, col=Animal), size=2) +
@@ -79,6 +85,13 @@ stan_out2 <- data.frame(Plant=1:43, t(apply(posterior_predict(mstan2), 2, quanti
                               M = `X50.`/Samples,
                               UC = `X75.`/Samples,
                               UI = `X97.5.`/Samples)
+lin_out2 <- plogis(posterior_linpred(mstan2))
+stan_out2 <- data.frame(Plant=1:43, t(apply(lin_out2, 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
+  left_join(dat2) %>% rename(LI = `X2.5.`,
+                             LC = `X25.`,
+                             M = `X50.`,
+                             UC = `X75.`,
+                             UI = `X97.5.`)
 ggplot(stan_out2 %>% filter(Samples > 0) %>% mutate(Throughput = ifelse(Target <= 6, "Low", "High"))) +
   geom_segment(aes(x=Plant, xend=Plant, y=LI, yend=UI)) +
   geom_segment(aes(x=Plant, xend=Plant, y=LC, yend=UC, col=Animal), size=2) +
@@ -92,12 +105,19 @@ ggplot(stan_out2 %>% filter(Samples > 0) %>% mutate(Throughput = ifelse(Target <
 dat3 <- prev %>% filter(Genus == "Enterococci")
 mstan3 <- stan_glmer(cbind(Isolates, Samples-Isolates) ~ Animal + (1|Plant), family='binomial',
                      data=dat3)
-stan_out3 <- data.frame(Plant=1:43, t(apply(posterior_predict(mstan3), 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
+stan_out3 <- data.frame(Plant=1:43, t(apply(lin_out3, 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
   left_join(dat3) %>% mutate(LI = `X2.5.`/Samples,
-                            LC = `X25.`/Samples,
-                            M = `X50.`/Samples,
-                            UC = `X75.`/Samples,
-                            UI = `X97.5.`/Samples)
+                             LC = `X25.`/Samples,
+                             M = `X50.`/Samples,
+                             UC = `X75.`/Samples,
+                             UI = `X97.5.`/Samples)
+lin_out3 <- plogis(posterior_linpred(mstan3))
+stan_out3 <- data.frame(Plant=1:43, t(apply(lin_out3, 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
+  left_join(dat3) %>% rename(LI = `X2.5.`,
+                             LC = `X25.`,
+                             M = `X50.`,
+                             UC = `X75.`,
+                             UI = `X97.5.`)
 ggplot(stan_out3 %>% filter(Samples > 0) %>% mutate(Throughput = ifelse(Target <= 6, "Low", "High"))) +
   geom_segment(aes(x=Plant, xend=Plant, y=LI, yend=UI)) +
   geom_segment(aes(x=Plant, xend=Plant, y=LC, yend=UC, col=Animal), size=2) +
@@ -158,7 +178,19 @@ write.csv(prev2009, "data/2009_sample_size_calcs.csv", row.names=FALSE)
 
 
 # Now look at prevalance of each type among the thingees
+all <- bind_rows(stan_out, stan_out2, stan_out3)
 
+write.csv(all, "data/fitted_prevalence.csv", row.names=FALSE)
+ggplot(all %>% filter(Samples > 0) %>% mutate(Throughput = ifelse(Target <= 6, "Low", "High"))) +
+  geom_segment(aes(x=Plant, xend=Plant, y=LI, yend=UI)) +
+  geom_segment(aes(x=Plant, xend=Plant, y=LC, yend=UC, col=Animal), size=2) +
+  geom_point(aes(x=Plant, y=M, col=Animal, fill=Throughput), size=3, shape=21) +
+  facet_wrap(~Genus, ncol=1) +
+  guides(col=guide_legend(title=NULL)) +
+  theme_bw() + ylab("Prevalence") +
+  scale_y_continuous(labels=scales::percent_format()) +
+  scale_x_continuous(breaks=NULL) +
+  scale_fill_manual(values=c("white", "black"))
 
 
 

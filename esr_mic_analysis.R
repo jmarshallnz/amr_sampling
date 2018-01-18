@@ -42,7 +42,8 @@ all <- rbind(mb_esc, mb_cam, mb_ent) %>% left_join(animals) %>%
   left_join(resist) %>% filter(Animal != "Produce") %>%
   mutate(NMD.Code = str_replace_all(NMD.Code, ' ', '')) %>%
   filter(Species %in% c("C.jejuni", "C.coli", "E.coli", "Enterococci"),
-         !Antimicrobial %in% c("BAC", "TYL"))
+         !Antimicrobial %in% c("BAC", "TYL")) %>%
+  mutate(Species = fct_collapse(Species, Campylobacter=c("C.jejuni", "C.coli")))
 
 # Decide if resistant or susceptible. This gives the same results as in the final
 # report - yay!
@@ -64,7 +65,7 @@ dat_glm <- desc %>% mutate(AMCSpeciesAnimal=interaction(Antimicrobial,Animal,Spe
   mutate(Susceptible= Susceptible+Intermediate, PlantEffect=interaction(Antimicrobial, Species, NMD.Code)) %>%
   select(Antimicrobial, Animal, Species, AMCSpeciesAnimal, PlantEffect, NMD=NMD.Code, Susceptible, Resistant)
 
-glmer(cbind(Resistant, Susceptible) ~ AMCSpeciesAnimal + (1|PlantEffect), family='binomial', data=dat_glm)
+#glmer(cbind(Resistant, Susceptible) ~ AMCSpeciesAnimal + (1|PlantEffect), family='binomial', data=dat_glm)
 
 fit <- stan_glmer(cbind(Resistant, Susceptible) ~ AMCSpeciesAnimal + (1|PlantEffect), family='binomial', data=dat_glm)
 
@@ -75,15 +76,56 @@ out <- data.frame(dat_glm, t(apply(posterior_predict(fit), 2, quantile, probs=c(
          UC = `75%`/(Susceptible+Resistant),
          UI = `97.5%`/(Susceptible+Resistant)) %>%
   mutate(Plant = factor(paste(Animal, NMD)))
+write.csv(out, "data/fitted_resistance.csv", row.names=FALSE)
 
-ggplot(out %>% filter(Species == "E.coli")) +
+out2 <- data.frame(dat_glm, t(apply(posterior_predict(fit, re.form = ~0), 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975))), check.names=FALSE) %>%
+  mutate(LI = `2.5%`/(Susceptible+Resistant),
+         LC = `25%`/(Susceptible+Resistant),
+         M = `50%`/(Susceptible+Resistant),
+         UC = `75%`/(Susceptible+Resistant),
+         UI = `97.5%`/(Susceptible+Resistant)) %>%
+  mutate(Plant = factor(paste(Animal, NMD)))
+
+# This is for model predictions, rather than posterior sampled predictions
+# (i.e. posterior sample prediction includes further randomness from the bernoulli/binomial
+# outcome)
+pos <- plogis(posterior_linpred(fit, re.form=~0))
+out <- data.frame(dat_glm,t(apply(pos, 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975))), check.names=FALSE) %>%
+  rename(LI = `2.5%`,
+         LC = `25%`,
+         M = `50%`,
+         UC = `75%`,
+         UI = `97.5%`) %>%
+  mutate(Plant = factor(paste(Animal, NMD))) %>%
+  select(Antimicrobial, Species, Animal, LI, LC, M, UC, UI) %>%
+  unique()
+
+write.csv(out, "data/fitted_resistance_FE.csv", row.names=FALSE)
+ggplot(out) +
+  geom_segment(aes(x=Antimicrobial, xend=Antimicrobial, y=LI, yend=UI)) +
+  geom_segment(aes(x=Antimicrobial, xend=Antimicrobial, y=LC, yend=UC), size=2) +
+  geom_point(aes(x=Antimicrobial, y=M), size=3, shape=21, fill='white') +
+  guides(col='none') +
+  theme_bw() + ylab("Resistance") +
+  scale_y_continuous(labels=scales::percent_format(), limits=c(0,1)) +
+  scale_x_discrete("Antimicrobial") +
+  coord_flip() +
+  facet_grid(Animal~Species, scales = 'free_y')
+
+
+
+resist <- read.csv("data/fitted_resistance.csv") %>%
+  left_join(read.csv("data/esr/resistance.csv") %>% select(Antimicrobial, Name))
+
+ggplot(resist %>% filter(Species == "Campylobacter")) +
   geom_segment(aes(x=Plant, xend=Plant, y=LI, yend=UI)) +
   geom_segment(aes(x=Plant, xend=Plant, y=LC, yend=UC, col=Animal), size=1) +
   geom_point(aes(x=Plant, y=M, col=Animal), size=3, shape=21, fill='white') +
   guides(col='none') +
-  theme_bw() + ylab("Resistance") +
-  scale_y_continuous(labels=scales::percent_format()) +
-  facet_wrap(~Antimicrobial, scales = 'free_x')
+  theme_bw() + ylab("Campylobacter Resistance") +
+  scale_y_continuous(labels=scales::percent_format(), limits=c(0,1)) +
+  scale_x_discrete("Plant", breaks=NULL) +
+  facet_wrap(~Name, scales = 'free_x')
 
 # OK, what we want to do is some sort of an estimate of
 # sample size required to detect a (say) 5% change in rate of
@@ -228,15 +270,31 @@ nC = ceiling((1/2) * n * (1 + AR) * m)
 c(nE, nC)
 
 # So, sample size calculation for comparison of mean etc.
-
+library(sjstats)
+library(dplyr)
 
 library(lme4)
-fit2 <- glmer(cbind(Resistant, Susceptible) ~ (1|AMCSpeciesAnimal) + (1|NMD), family='binomial', data=ec %>% filter(Animal == "Calves"))
-icc(fit2)
+dt <- expand.grid(Animal = unique(dat_glm$Animal), Species = unique(dat_glm$Species))
+for (i in 1:nrow(dt)) {
+  md <- dat_glm %>% filter(Species == dt$Species[i], Animal == dt$Animal[i])
+  fit <- glmer(cbind(Resistant, Susceptible) ~ (1|AMCSpeciesAnimal) + (1|NMD), family='binomial',
+               data=md)
+  dt$ICC[i] <- icc(fit)["NMD"]
+  dt$CV[i] <- md %>% filter(Antimicrobial=="CIP") %>%
+    group_by(NMD) %>% dplyr::summarize(s = sum(Resistant+Susceptible)) %>%
+    pull(s) %>% cv
+  dt$MCS[i] <- md %>% filter(Antimicrobial=="CIP") %>%
+    group_by(NMD) %>% dplyr::summarize(s = sum(Resistant+Susceptible)) %>%
+    pull(s) %>% mean
+}
+write.csv(dt, "data/sample_summary.csv", row.names=FALSE)
 
 # TODO: It seems poultry has a high ICC?? Need to look into this further,
 # and adapt the design effect as needed (way fewer clusters there that
 # are larger, right?)
+md <- dat_glm %>% filter(Species == "Campylobacter", Animal == "Poultry")
+fit <- glmer(cbind(Resistant, Susceptible) ~ (1|AMCSpeciesAnimal) + (1|NMD), family='binomial',
+             data=md)
 
 #cv=0.8
 #mean=33
@@ -246,9 +304,12 @@ fit2 <- glmer(cbind(Resistant, Susceptible) ~ (1|AMCSpeciesAnimal) + (1|NMD), fa
 icc(fit2)
 
 # working out cv/mean cluster size
-dat_glm %>% filter(Species == "C.jejuni", Animal == "Poultry", Antimicrobial=="CIP") %>%
+dat_glm %>% filter(Species == "Campylobacter", Animal == "Poultry", Antimicrobial=="CIP") %>%
   group_by(NMD) %>% dplyr::summarize(s = sum(Resistant+Susceptible)) %>%
   pull(s) %>% cv
+dat_glm %>% filter(Species == "Campylobacter", Animal == "Poultry", Antimicrobial=="CIP") %>%
+  group_by(NMD) %>% dplyr::summarize(s = sum(Resistant+Susceptible)) %>%
+  pull(s) %>% mean
 
 # using same data as we had normally. This assumes equal sample sizes...
 crtpwr.2prop(alpha=0.05, power=NA, m=24, n=12.5, icc=0.02, cv=0.56, p1=0.45, p2=0.55)
