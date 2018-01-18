@@ -1,0 +1,167 @@
+---
+title: "Sample size considerations for antimicrobial resistance study"
+author: "Jonathan Marshall"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(forcats)
+knitr::opts_chunk$set(echo = FALSE)
+prev <- read.csv("data/fitted_prevalence.csv")
+resist <- read.csv("data/fitted_resistance.csv") %>%
+  left_join(read.csv("data/esr/resistance.csv") %>% select(Antimicrobial, Name)) %>%
+  mutate(Animal=fct_recode(Animal, Pigs='Pigs', Poultry='Poultry', `Very young calves`='Calves'), Animal=fct_relevel(Animal, c("Pigs", "Poultry")))
+resist_overall <- read.csv("data/fitted_resistance_FE.csv") %>%
+  left_join(read.csv("data/esr/resistance.csv") %>% select(Antimicrobial, Name)) %>%
+  mutate(Animal=fct_recode(Animal, Pigs='Pigs', Poultry='Poultry', `Very young calves`='Calves'), Animal=fct_relevel(Animal, c("Pigs", "Poultry")))
+icc <- read.csv("data/sample_summary.csv", stringsAsFactors=FALSE)
+icc[duplicated(icc[,2]),2] <- ''
+icc$Deff = ((icc$CV^2+1)*icc$MCS-1)*icc$ICC + 1
+
+ss_prop <- read.csv("data/sample_size_prop.csv")
+ss_test <- read.csv("data/sample_size_test.csv")
+```
+
+## Introduction
+
+In 2009 MPI commissioned a study to determine baseline prevalence of antimicrobial resistance among *E.coli*, *Campylobacter*, *Enterococcus* and *Salmonella* isolates obtained from red meat, pork and poultry plants. This document proposes a sampling scheme for an additional round of sampling, based on the information from the previous study.
+
+## Sample size considerations
+
+When estimating sample size, a number of considerations need to be taken into account. These include *apriori* estimated prevalences, any potential dependence between units in the sampling population, and any potential multiplicities of items estimated or tested (e.g. comparison with previous baseline survey). The estimated prevalence affects potential sample size, with prevalences closer to 0% or 100% typically resulting in smaller standard errors (and thus smaller sample sizes), while those closer to 50% result in the largests standard errors (and thus highest sample size for a given precision). In addition if units sampled are correlated in some way, then standard errors will typically be larger, and hence sample sizes larger for the same precision. In this example, we'd expect both prevalence of bacteria and potentially also prevalence of antimicrobial resistance to cluster within processing plants, and hence need to account for such clustering in sample size computations. Finally, given we are assessing a number of antimicrobials across a range of bacteria and animal types, we'd require a larger sample size to ensure any testing (e.g. comparison to the baseline survey in 2009) has the required false positive rate and that resulting confidence intervals are adjusted for multiplicity of outcomes.
+
+In addition, the sample size calculation will give an estimate of the appropriate number of positive isolates for each bacterial species. However, to obtain this number of positive isolates, a greater number of samples will need to be taken, according to the underlying prevalence of the bacterial species from each processing type. Some bacterial species have very low prevalence (e.g. *Salmonella*) while others have low prevalence across processing types (e.g. *Campylobacter* from non-poultry processors), and obtaining the required number of samples in these cases will be difficult.
+
+## Analysis of 2009 baseline study
+
+ESR has provided data from the 2009 baseline study, which can serve as estimates of *apriori* prevalence, and to assess clustering of units within plants for this study. To estimate these, several hierarchical logistic regression models were used. We first assess prevalence of each bacterial species across the different processing plants, noting in particular those with very low throughput and whether they differ from plants with higher throughput. The 2009 baseline study sampled in proportion to throughput, and we'd recommend this study be done in the same way.
+
+### Prevalence from the 2009 baseline study
+
+A hierarchical logistic regression was fit to the prevalence data for each bacterial species, with process type as a fixed effect and plant identifier as random effect to account for within-plant clustering. The model was fit in a Bayesian context using Stan (http://mc-stan.org/) with normal priors on fixed effects, normal random effects with mean zero and covariance are modelled using a uniform prior on correlations and variances, and a Gamma prior on scale. Output from the model is shown below.
+
+```{r, fig.width=8, fig.height=8, fig.caption="Prevalence of each bacterial species across all plants in the 2009 study. Solid circles are point estimates, thick bars are 50% credible intervals, and black lines are 95% credible intervals."}
+ggplot(prev %>% filter(Samples > 0) %>% mutate(Throughput = ifelse(Target <= 6, "Low", "High"))) +
+  geom_segment(aes(x=Plant, xend=Plant, y=LI, yend=UI)) +
+  geom_segment(aes(x=Plant, xend=Plant, y=LC, yend=UC, col=Animal), size=2) +
+  geom_point(aes(x=Plant, y=M, col=Animal, fill=Throughput), size=3, shape=21) +
+  facet_wrap(~Genus, ncol=1) +
+  guides(col=guide_legend(title=NULL)) +
+  theme_bw() + ylab("Prevalence") +
+  scale_y_continuous(labels=scales::percent_format()) +
+  scale_x_continuous(breaks=NULL) +
+  scale_fill_manual(values=c("white", "black"))
+```
+
+As can be seen, there is some evidence for prevalence of each bacterial species varying across plants, though there is little evidence that those plants with low throughput differ markedly from those with higher throughput. As expected, the main differences are by processing type, with higher prevalences of all bacterial species on poultry processors compared to pig and calf processors. In particular, there were low rates of *Campylobacter* in both pig and calf processors, meaning few isolates were available for antimicrobial testing.
+
+### Antimicrobial resistance from the 2009 baseline study
+
+A hierarchical logistic regression was fit to the resistance data for each antibiotic, bacteria and animal combination. A random effect for plant by antibacterial was included to account for within-plant clustering of observations. Output from the model for each bacterial species are shown below. Note there are fewer plants represented here, as some plants had no positive isolates for some bacterial species.
+
+```{r, fig.width=8, fig.height=4, fig.caption="Resistance of *Campylobacter* to a range of antibiotics across all plants in the 2009 study. Solid circles are point estimates, thick bars are 50% credible intervals, and black lines are 95% credible intervals."}
+ggplot(resist %>% filter(Species == "Campylobacter")) +
+  geom_segment(aes(x=Plant, xend=Plant, y=LI, yend=UI)) +
+  geom_segment(aes(x=Plant, xend=Plant, y=LC, yend=UC, col=Animal), size=1) +
+  geom_point(aes(x=Plant, y=M, col=Animal), size=3, shape=21, fill='white') +
+  guides(col='none') +
+  theme_bw() + ylab("Campylobacter Resistance") +
+  scale_y_continuous(labels=scales::percent_format(), limits=c(0,1)) +
+  scale_x_discrete("Plant", breaks=NULL) +
+  facet_wrap(~Name, scales = 'free_x', ncol=4)
+```
+
+```{r, fig.width=8, fig.height=10, fig.caption="Resistance of *E.coli* to a range of antibiotics across all plants in the 2009 study. Solid circles are point estimates, thick bars are 50% credible intervals, and black lines are 95% credible intervals."}
+ggplot(resist %>% filter(Species == "E.coli")) +
+  geom_segment(aes(x=Plant, xend=Plant, y=LI, yend=UI)) +
+  geom_segment(aes(x=Plant, xend=Plant, y=LC, yend=UC, col=Animal), size=1) +
+  geom_point(aes(x=Plant, y=M, col=Animal), size=3, shape=21, fill='white') +
+  guides(col='none') +
+  theme_bw() + ylab("E.coli Resistance") +
+  scale_y_continuous(labels=scales::percent_format(), limits=c(0,1)) +
+  scale_x_discrete("Plant", breaks=NULL) +
+  facet_wrap(~Name, scales = 'free_x', ncol=4)
+```
+
+```{r, fig.width=8, fig.height=6, fig.caption="Resistance of *Enterococci* to a range of antibiotics across all plants in the 2009 study. Solid circles are point estimates, thick bars are 50% credible intervals, and black lines are 95% credible intervals."}
+ggplot(resist %>% filter(Species == "Enterococci")) +
+  geom_segment(aes(x=Plant, xend=Plant, y=LI, yend=UI)) +
+  geom_segment(aes(x=Plant, xend=Plant, y=LC, yend=UC, col=Animal), size=1) +
+  geom_point(aes(x=Plant, y=M, col=Animal), size=3, shape=21, fill='white') +
+  guides(col='none') +
+  theme_bw() + ylab("Enterococci Resistance") +
+  scale_y_continuous(labels=scales::percent_format(), limits=c(0,1)) +
+  scale_x_discrete("Plant", breaks=NULL) +
+  facet_wrap(~Name, scales = 'free_x', ncol=4)
+```
+
+As can be seen, there is some between plant variation in resistance, but again is largely driven by the different processing types. The total estimated proportion of resistance across each animal and bacterial species is shown below.
+
+```{r, fig.width=8, fig.height=6, fig.caption="Overall resistance of all species to a range of antibiotics in the 2009 study. Solid circles are point estimates, thick bars are 50% credible intervals, and black lines are 95% credible intervals."}
+ggplot(resist_overall) +
+  geom_segment(aes(x=Name, xend=Name, y=LI, yend=UI)) +
+  geom_segment(aes(x=Name, xend=Name, y=LC, yend=UC, col=Animal), size=2) +
+  geom_point(aes(x=Name, y=M, col=Animal), size=3, shape=21, fill='white') +
+  guides(col='none') +
+  theme_bw() + ylab("Resistance") +
+  scale_y_continuous(labels=scales::percent_format(), limits=c(0,1)) +
+  scale_x_discrete("") +
+  coord_flip() +
+  facet_grid(Species~Animal, scales = 'free_y', space='free_y')
+```
+
+## Sample size estimation
+
+### Estimation of intraclass correlation
+
+Sample size calculations in the presence of clustering requires the incorporation
+of intraclass correlation (ICC), in addition to mean (MCS) and coefficient of variation (CV) of the cluster sizes (i.e. size of clusters, and how much that varies between clusters) to evaluate the design effect, which is essentially how much the variance of parameter estimates inflate given the lack of independence of the observations.
+
+To estimate these, we used the multilevel models above to produce the table below.
+
+```{r}
+knitr::kable(icc[,c(2,1,3:6)], digits=c(rep(3, 4), 1,2))
+```
+
+The intracluster coefficient is in general low, suggesting not too much clustering by plant within animal species, which confirms what we saw above. This results in a low design effect (Deff) in most cases, the exception being *Campylobacter* on Poultry, where the large ICC combined with large cluster size leaves few effective independent observations. However, this is primarily a consequence of very low prevalence of resistance to antimicrobials observed, so that small differences in prevalence are inflated on the logit scale, yielding estimates that are much less certain. To be conservative, we'll consider design effects from 1.2 through to 2.4 in the sample size estimation below.
+
+### Sample size for a given precision
+
+For a clustered sampling design, we inflate the variance of the estimate by the design effect. In addition, we need to consider that we have multiple outcome variables to test, one for each antimicrobial and bacteria combination. This generally leads to an additional inflation of standard errors, e.g. using Bonferroni correction or similar. However, in this case we'd expect the outcome variables to be correlated, so that if one sample is resistant for one antimicrobial, it may also be resistant to others (or perhaps be more susceptible to others). This is particularly the case if isolates of two different bacteria are obtained from the same sample. Hence, Bonferroni correction is likely overconservative. Further, the number of hypotheses or antimicrobials of particular interest is likely much smaller than the total number of antimicrobial/bacteria combinations. Thus, a less stringent correction for multiple testing is warranted. To give some idea of this, we correct for 5 independent tests below by including precision at 99% confidence levels rather than 95% (or similarly, for hypothesis tests at a 1% error rate rather than 5%).
+
+The combinations of design effect, sample size, confidence level and baseline prevalences and the corresponding precision in estimates are given in the figure below. Note that the curves are symmetric in prevalence, i.e. the detectable effect at baseline prevalence $p$ is the same as that at prevalence $1-p$, and hence we show only the curve for baseline prevalence less than 0.5.
+
+```{r, fig.width=8, fig.height=8, fig.caption="Sample size, design effect and precision at a given confidence level for clustered sampling."}
+ggplot(ss_prop) + geom_line(aes(x=p1,y=delta_p, lty=alpha)) +
+  facet_grid(Deff~n) +
+  theme_bw() +
+  guides(lty=guide_legend('Confidence level')) +
+  ylab("Uncertainty in prevalence") +
+  xlab("Baseline prevalence")
+```
+
+### Sample size for comparison to the 2009 study
+
+For comparison to the 2009 study, a two-sample difference of proportions would be used within a two-stage clustered sampling design. As above, this would include design effect for clustering and P-value adjustment for multiple testing.
+
+The figure below shows the detectable change in prevalence of antimicrobial resistance given the prevalence in 2009, the sample size, design effect, error rate and corresponding power. Note the trade-off between power and error rate: 80% power at a 5% error rate can detect similar changes in prevalence to 60% power at a 1% error rate. Thus, there is some trade-off between the number of hypotheses to test (which determines the overall error rate) and the corresponding power for a given sample size.
+
+```{r, fig.width=8, fig.height=8, fig.caption="Sample size, design effect, power, detectable change in prevalence and error rate for clustered sampling."}
+ggplot(ss_test) + geom_line(aes(x=p1,y=delta_p,col=factor(power), lty=factor(alpha))) +
+  facet_grid(Deff~n) +
+  theme_bw() +
+  scale_color_manual(name='Power', values=c('black', 'red')) +
+  guides(lty=guide_legend('Error rate')) +
+  ylab("Detectable change in prevalence") +
+  xlab("Baseline prevalence")
+```
+
+## Recommendations
+
+We recommend that a sample size of 300, similar to that done in 2009 would give precision of around 5-7% in estimated prevalence of antimicrobials at a baseline prevalence of 20% at the 95% confidence level, increasing to around 10% at prevalences closer to 50%. This would also allow detection of 10-15% differences in prevalence compared to the 2009 study, particularly for those antimicrobials with lower prevalence of resistance, which was generally the case.
+
+For sampling, we recommend samples are taken in accordance with throughput, as done in 2009. Very low throughput plants need not be included, as the variation in both prevalence of bacteria and prevalence of antimicrobial resistance among plants would be adequately provided by the higher throughput plants. It is still crucial to ensure that an adequate number of plants are covered, however - sampling the same plants as in 2009 would have the advantage of being able to compare differences within plant which would yield additional power.
