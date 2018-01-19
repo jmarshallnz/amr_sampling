@@ -146,6 +146,53 @@ ggplot(stan_out3 %>% filter(Samples > 0) %>% mutate(Throughput = ifelse(Target <
 # try and predict the overall prevalence directly
 pred1 <- plogis(
   posterior_linpred(mstan, newdata=data.frame(Animal = levels(dat$Animal)), re.form=~0))
+colnames(pred1) <- levels(dat$Animal)
+prev1 <- data.frame(Iteration=1:nrow(pred1), Genus="E.coli", pred1)
+pred2 <- plogis(
+  posterior_linpred(mstan2, newdata=data.frame(Animal = levels(dat2$Animal)), re.form=~0))
+colnames(pred2) <- levels(dat2$Animal)
+prev2 <- data.frame(Iteration=1:nrow(pred2), Genus="Campylobacter", pred2)
+pred3 <- plogis(
+  posterior_linpred(mstan3, newdata=data.frame(Animal = levels(dat3$Animal)), re.form=~0))
+colnames(pred3) <- levels(dat3$Animal)
+prev3 <- data.frame(Iteration=1:nrow(pred3), Genus="Enterococcus", pred3)
+
+prev2009 <- bind_rows(prev1, prev2, prev3)
+#write.csv(prev2009, "data/2009_prev.csv", row.names=FALSE)
+
+
+# sample from a normal with mean p, sd sqrt(p*(1-p)/n)
+dat2017 <- read.csv("data/2017_nmd_prev.csv", stringsAsFactors = FALSE) %>%
+  mutate(mean = Positives/Samples, sd = sqrt(mean*(1-mean) / Samples))
+
+# for each row, sample 1000 from a normal.
+iters <- lapply(1:nrow(dat2017), function(x) { data.frame(Animal=dat2017$Animal[x], Genus=dat2017$Genus[x], 
+                                            P = rnorm(4000, dat2017$mean[x], dat2017$sd[x]), Iteration = 1:4000) })
+prev <- do.call(rbind, iters)
+prev$P[prev$P < 0] = 0
+prev$P[prev$P > 1] = 1
+prev$Genus <- as.character(prev$Genus)
+prev$Animal <- as.character(prev$Animal)
+prev$Genus[prev$Genus == 'E. coli'] <- 'E.coli'
+prev$Animal[prev$Animal == "Very young calves"] <- "Calves"
+head(prev)
+
+# OK, now join them up
+prev_both <- prev2009 %>% gather(Animal, Prevalence, Calves:Poultry) %>% left_join(prev) %>%
+  replace_na(replace = list(P = 1)) %>% mutate(FinalPrev = Prevalence * P) %>%
+  group_by(Animal, Genus) %>% summarize(
+    LI = quantile(Prevalence, 0.025),
+    LC = quantile(Prevalence, 0.25),
+    M = quantile(Prevalence, 0.5),
+    UC = quantile(Prevalence, 0.75),
+    UI = quantile(Prevalence, 0.975)) %>%
+  mutate(CI = sprintf("%.1f (%.1f, %.1f)", M*100, LI*100, UI*100)) %>%
+  mutate(Samples = signif(300 / LC, 2))
+write.csv(prev_both, "data/2009_sample_size_calcs.csv", row.names=FALSE)
+
+
+# and compute the necessary stuff
+
 prev1 <- data.frame(Animal=levels(dat$Animal),
                     t(apply(pred1, 2, quantile, probs=c(0.025, 0.25, 0.5, 0.75, 0.975)))) %>%
   rename(LI = `X2.5.`,

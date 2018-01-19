@@ -7,6 +7,7 @@ output: html_document
 
 ```{r setup, include=FALSE}
 library(dplyr)
+library(tidyr)
 library(knitr)
 knitr::opts_chunk$set(echo = TRUE)
 prev2009 <- read.csv("../data/2009_sample_size_calcs.csv")
@@ -17,16 +18,7 @@ dat2017 <- read.csv("../data/2017_nmd_prev.csv") %>%
 
 ## Samples required for isolates
 
-Overall prevalence for each genus from the 2009 survey is shown below.
-
-```{r}
-prev2009 %>%
-  select(Animal, Genus, CI) %>%
-  spread(Genus, CI) %>%
-  kable
-```
-
-As noted earlier, the per-plant prevalences of each bacterial species represent true prevalences only for *Enterococcus* across all animal groups, and *Campylobacter* for very young calves and pigs. The *E.coli* results for all animal groups, and *Campylobacter* results for poultry are both conditional on an NMD positive sample being sent for additional isolation.
+As noted earlier, the prevalences from the 2009 study represent true prevalences only for *Enterococcus* across all animal groups, and *Campylobacter* for very young calves and pigs. The *E.coli* results for all animal groups, and *Campylobacter* results for poultry are both conditional on an NMD positive sample being sent for additional isolation.
 
 To assess true prevalence, and thus estimate sample sizes, additional data, including *Salmonella*, was obtained from the NMD (Gail Duncan, pers comm) for the 3rd quarter of 2017 and is presented below. Note the low prevalence in general of Salmonella, and the lower prevalence of E. coli among adult cattle.
 
@@ -36,11 +28,14 @@ dat2017 %>% kable
 
 Combining these NMD results with the prevalence data (which represents the likely success of obtaining an isolate given an NMD positive) from the 2009 study yields the following estimates of prevalence.
 
-# TODO: Multiply up the prevalences. Ideally would combine uncertainty from the NMD prevalence with that from survey prevalence. Guess that'd be easy enough if we just
-bootstrap a heap? i.e. sample prevalence from prevalance distro + posterior from 2009 to get updated posterior. Trouble is we don't have posterior anymore, so need to dump that as well instead of just the summaries.
+```{r}
+prev2009 %>%
+  select(Animal, Genus, CI) %>%
+  spread(Genus, CI) %>%
+  kable
+```
 
-
-The corresponding sample size required to produce 300 isolates for each genus is given below, computed using the 25th percentile of estimated prevalence from the 2009 survey to ensure we're 75% likely to get the required number of isolates. As can be seen, the sample sizes required for Campylobacter on non-poultry sources are infeasible.
+The corresponding sample size required to produce 300 isolates for each genus is given below, computed using the 25th percentile of estimated prevalence to ensure we're 75% likely to get the required number of isolates. As can be seen, the sample sizes required for Campylobacter on non-poultry sources are infeasible.
 
 ```{r}
 prev2009 %>%
@@ -51,6 +46,6 @@ prev2009 %>%
 
 ## Sampling frequency
 
-If isolates are exclusively sourced from NMD, then the samples available are at most weekly (15 carcass samples per week) for beef, and daily for poultry (Table 1). To achieve a sampling plan where samples are in proportion to throughput, the 2009 survey sampled plants at different frequencies (as samples in NMD are fixed and do not alter based on throughput), ranging from weekly through to monthly, so that approximately 75 isolates per quarter were available in total. 
+If isolates are exclusively sourced from NMD, then a consideration is that samples in NMD are at fixed intervals and do not vary based on throughput. To achieve a sampling plan where samples are in proportion to throughput, the 2009 survey requested samples from LAS labs for different plants at different frequencies, ranging from weekly through to monthly.
 
-An alternate scheme may be to request laboratories perform the additional testing on a given number of samples per plant per quarter, though the logistics of this will need to be considered. It may be possible to store isolates per quarter and then select for additional testing?
+A similar scheme would be required for a further sampling round. The number of samples to collect excluding non-poultry *Campylobacter* are within the numbers collected by NMD for routine testing, and hence LAS labs might again be utilised to gather the required rinsates, plates, or petrifilms for further isolation and antimicrobial susceptibility testing.
