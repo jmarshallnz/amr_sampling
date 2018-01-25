@@ -340,6 +340,12 @@ for (i in 1:nrow(dt)) {
     group_by(NMD) %>% dplyr::summarize(s = sum(Resistant+Susceptible)) %>%
     pull(s) %>% mean
 }
+
+# TODO: Donald wants some subsampling tests. Idea is to subsample the plants,
+#       Then increase the samples per plant, so total samples is the same
+#       Then recompute CV/MCS, assuming the same ICC.
+#       And see what that does to the design effect.
+#       That should give some indication of what happens to power.
 write.csv(dt, "data/sample_summary.csv", row.names=FALSE)
 
 # TODO: It seems poultry has a high ICC?? Need to look into this further,
