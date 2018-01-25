@@ -23,7 +23,7 @@ bobby <- read.csv("data/esr/Bobby details.csv", skip = 1, stringsAsFactors = FAL
 
 porcine <- read.csv("data/esr/Porcine details.csv", skip = 1, stringsAsFactors = FALSE) %>%
   extract(PHL.Sample.Number, into='CPH.No.', regex="CPH[0]*([0-9A-B]+)", convert=FALSE) %>%
-  select(CPH.No., Sample.Type, Date.Sampled, Quarter, NMD.Code, Campy.PCR, E.coli=Confirmed.E..coli.Result) %>%
+  select(CPH.No., Sample.Type, Date.Sampled, Quarter, NMD.Code, Campy.PCR, E.coli=Confirmed.E..coli.Result, Entero=Confirmed.Enterococcus.Result) %>%
   rename() %>%
   mutate(Animal="Pigs", Campy.PCR=str_replace_all(Campy.PCR, " ", ""),
          E.coli=fix_ecoli(E.coli),
