@@ -417,7 +417,11 @@ for (i in 1:nrow(dts)) {
   md <- dat_glm %>% filter(Species == dts$Species[i], Animal == dts$Animal[i])
   fit <- glmer(cbind(Resistant, Susceptible) ~ (1|AMCSpeciesAnimal) + (1|NMD), family='binomial',
                data=md)
-  dts$ICC[i] <- icc(fit)["NMD"]
+  if (0) {
+    dts$ICC[i] <- icc(fit)["NMD"]
+  } else {
+    dts$ICC[i] <- 0.02
+  }
   
   # OK, now go through and drop plants one by one
   plants <- md %>% filter(Antimicrobial=="CIP") %>% mutate(Total = Resistant+Susceptible) %>% arrange(desc(Total))
@@ -455,10 +459,13 @@ df_out <- d_out %>% left_join(
 ) %>% mutate(Deff_on_NNr = pmax(0, Deff_on_NTT - Deff_on_N_I), Nreqd = (1-ICC)/Deff_on_NNr)
 
 library(ggplot2)
-ggplot(df_out) + geom_line(aes(x=P, y=Nreqd)) + facet_grid(Animal ~ Species)
+ggplot(df_out %>% filter(P >= 5)) + geom_line(aes(x=P, y=Nreqd, col=Species)) + facet_wrap(~Animal, scales = 'free_x') +
+  scale_y_continuous(limits=c(0,1500))
 
 ggplot(df_out %>% filter(Animal=="Calves", Species=="E.coli", P >= 5)) + geom_line(aes(x=P, y=Nreqd)) +
   xlab("Number of plants") + ylab("Number of isolates") + scale_y_continuous(limits=c(0,1300), expand = c(0,1))
+
+# TODO: Could repeat with, say ICC = 0.02?
 
 # Sample locations
 
@@ -485,8 +492,6 @@ plants be sampled. In general the recommendation is to sample as many plants as 
 order to obtain samples, with the exception of those that would have few isolates taken due
 to very low throughput.
 
-
-We illustrate this with E.coli on calves, which has the greatest number of plants available.
 
 # TODO: It seems poultry has a high ICC?? Need to look into this further,
 # and adapt the design effect as needed (way fewer clusters there that
