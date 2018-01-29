@@ -368,8 +368,10 @@ for (i in 1:nrow(dt_s)) {
   # and then allocate resistant/susceptible
   prev_sub <- subplants %>% mutate(Prev=Resistant / (Susceptible + Resistant)) %>%
     left_join(total_sub, by="NMD") %>% mutate(Resistant = rbinom(n(), Total, Prev), Susceptible = Total - Resistant)
-  
-  # TODO: Replace this with a simple lookup into dt above...
+
+  if (1) {
+    dt_s$ICC[i] <- dt %>% filter(Species == dt_s$Species[i], Animal == dt_s$Animal[i]) %>% pull(ICC)
+  } else {
   tryCatch({
     fit <- glmer(cbind(Resistant, Susceptible) ~ (1|AMCSpeciesAnimal) + (1|NMD), family='binomial',
                  data=prev_sub)
@@ -378,6 +380,7 @@ for (i in 1:nrow(dt_s)) {
   error = function(e) { cat("caught err\n"); dt_s$ICC[i] <- NA},
   warning = function(e) { cat("caught warn\n"); dt_s$ICC[i] <- NA}
   )
+  }
 
   dt_s$CV[i] <- prev_sub %>% filter(Antimicrobial=="CIP") %>%
     group_by(NMD) %>% dplyr::summarize(s = sum(Resistant+Susceptible)) %>%
@@ -402,10 +405,88 @@ dt %>% mutate(MCS2 = MCS*2, Deff = ((CV^2+1)*MCS-1)*ICC + 1, Deff2 = ((CV^2+1)*M
 dt_s %>% mutate(Deff = ((CV^2+1)*MCS-1)*ICC + 1) %>% group_by(Species, Animal) %>% summarize(Deff_L = quantile(Deff, 0.1),
                                                                                              Deff_M = quantile(Deff, 0.5),
                                                                                              Deff_U = quantile(Deff, 0.9)) %>%
-  left_join(dt %>% mutate(MCS2 = MCS*2, Deff = ((CV^2+1)*MCS-1)*ICC + 1, Deff2 = ((CV^2+1)*MCS2-1)*ICC + 1, Incr=Deff2/Deff) %>% select(Species, Animal, Deff, Deff2), by=c("Species", "Animal"))
+  left_join(dt %>% mutate(MCS2 = MCS*2, CV2=CV/2, Deff = ((CV^2+1)*MCS-1)*ICC + 1, Deff2 = ((CV2^2+1)*MCS2-1)*ICC + 1, Incr=Deff2/Deff) %>% select(Species, Animal, Deff, Deff2), by=c("Species", "Animal"))
+
+# Hmm, better idea: Reduce dataset one plant at a time for each one. Recompute
+# MCS and CV without altering sample size. Note down N. Then compute Deff/N as
+# that is the effect on power.
+
+dts <- expand.grid(Animal = unique(dat_glm$Animal), Species = unique(dat_glm$Species))
+out <- list()
+for (i in 1:nrow(dts)) {
+  md <- dat_glm %>% filter(Species == dts$Species[i], Animal == dts$Animal[i])
+  fit <- glmer(cbind(Resistant, Susceptible) ~ (1|AMCSpeciesAnimal) + (1|NMD), family='binomial',
+               data=md)
+  dts$ICC[i] <- icc(fit)["NMD"]
+  
+  # OK, now go through and drop plants one by one
+  plants <- md %>% filter(Antimicrobial=="CIP") %>% mutate(Total = Resistant+Susceptible) %>% arrange(desc(Total))
+
+  for (j in 2:nrow(plants)) {
+    CV = cv(plants$Total[1:j])
+    MCS = mean(plants$Total[1:j])
+    N = sum(plants$Total[1:j])
+    out[[length(out)+1]] <- data.frame(Animal = dts$Animal[i], 
+                                       Species = dts$Species[i],
+                                       ICC = dts$ICC[i],
+                                       CV = CV,
+                                       MCS = MCS,
+                                       N = N,
+                                       P = j)
+  }
+}
+d_out <- do.call(rbind, out) %>% mutate(Deff = ((CV^2+1)*MCS-1)*ICC + 1, N_on_Deff = N/Deff) %>%
+  mutate(Deff_on_N_I = (CV^2+1)*ICC/P, Deff_on_N_N = (1-ICC)/300, Deff_on_NT = Deff_on_N_I + Deff_on_N_N)
 
 
+d_out %>% left_join(
+  d_out %>% group_by(Animal, Species) %>% top_n(1, N) %>% select(Animal, Species, NT=N, DeffT=Deff,NT_on_DeffT=N_on_Deff)
+) %>% mutate(ExtraN = NT_on_DeffT / N_on_Deff * N/NT * 300)
 
+# NOPE - still not right. How about:
+# Deff/N needs to be maintained. This is
+# ((sd(N_i)^2/mean(N_i)^2 + 1) * mean(N_i) - 1)*ICC + 1) / N
+# = (sd(N_i)^2/(N/I) + N/I - 1)*ICC + 1) / N
+# = (sd(N_i)^2*I/N^2 + 1/I - 1/N)*ICC + 1/N)
+# Deff ~ A * MCS - ICC + 1
+# So Deff/N ~ A(I) * 1/I - ICC/N + 1/N
+df_out <- d_out %>% left_join(
+  d_out %>% group_by(Animal, Species) %>% top_n(1, N) %>% select(Animal, Species, Deff_on_NTT = Deff_on_NT)
+) %>% mutate(Deff_on_NNr = pmax(0, Deff_on_NTT - Deff_on_N_I), Nreqd = (1-ICC)/Deff_on_NNr)
+
+library(ggplot2)
+ggplot(df_out) + geom_line(aes(x=P, y=Nreqd)) + facet_grid(Animal ~ Species)
+
+ggplot(df_out %>% filter(Animal=="Calves", Species=="E.coli", P >= 5)) + geom_line(aes(x=P, y=Nreqd)) +
+  xlab("Number of plants") + ylab("Number of isolates") + scale_y_continuous(limits=c(0,1300), expand = c(0,1))
+
+# Sample locations
+
+In the case of a clustered sampling design, the number of samples in total, and the
+number of clusters determines the power of the design. In the case of estimating a mean or prevalence,
+the variance of the estimator (which specifies detectable differences or lengths of confidence intervals)
+takes the form
+
+var(p) prop (CV_I^2 + 1)*ICC/I + (1-ICC)/N
+
+where CV(I) is the coefficient of variation of cluster sizes, ICC is the intracluster correlation, 
+I the number of clusters, and N the number of samples. When the ICC is negligible, the second term dominates
+which is equivalent to a non-clustered design, and as ICC rises, the former dominates. Thus, in
+general, sampling more clusters with fewer samples per cluster generally gives more power in the
+case where intracluster correlation is non-trivial. Reducing the number of clusters increases
+the first term, requiring the second term to reduce (by increasing N) to compensate in order
+to maintain power. To illustrate this effect for this project, we consider the case with the most
+plants: E. coli on very young calves, sequentially removing the plant with the least throughput
+(and thus least samples) and compute the corresponding number of samples n in order to maintain
+power. The figure below shows the effect. Removing the very low throughput plants (plant ##-24) has
+little effect on the number of isolates, but as more are removed, the number of isolates increases.
+Over 400 isolates are required if only 10 plants are sampled, increasing to 1250 should only 5
+plants be sampled. In general the recommendation is to sample as many plants as feasible in
+order to obtain samples, with the exception of those that would have few isolates taken due
+to very low throughput.
+
+
+We illustrate this with E.coli on calves, which has the greatest number of plants available.
 
 # TODO: It seems poultry has a high ICC?? Need to look into this further,
 # and adapt the design effect as needed (way fewer clusters there that
