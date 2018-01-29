@@ -348,6 +348,65 @@ for (i in 1:nrow(dt)) {
 #       That should give some indication of what happens to power.
 write.csv(dt, "data/sample_summary.csv", row.names=FALSE)
 
+set.seed(3)
+dt_s <- expand.grid(Animal = unique(dat_glm$Animal), Species = unique(dat_glm$Species), Iteration=1:100)
+subsample_size <- 0.5
+for (i in 1:nrow(dt_s)) {
+  md <- dat_glm %>% filter(Species == dt_s$Species[i], Animal == dt_s$Animal[i])
+  
+  # subsample the plants - we want half of them
+  total_samples <- md %>% filter(Antimicrobial == "CIP") %>% summarize(s=sum(Susceptible + Resistant)) %>% pull(s)
+  plants <- md %>% filter(Antimicrobial == "CIP") %>% pull(NMD)
+  
+  # repeat this a bunch of times
+  wch_plants <- sample(plants, round(length(plants)*subsample_size))
+  subplants <- md %>% filter(NMD %in% wch_plants)
+  total_sub <- subplants %>% filter(Antimicrobial == "CIP") %>% ungroup %>% mutate(Total=Susceptible + Resistant) %>% select(NMD, Total)
+  # reallocate based on total_samples/total_sub to increase n...
+  # first increase the totals
+  total_sub$Total <- rmultinom(1, total_samples, total_sub$Total)
+  # and then allocate resistant/susceptible
+  prev_sub <- subplants %>% mutate(Prev=Resistant / (Susceptible + Resistant)) %>%
+    left_join(total_sub, by="NMD") %>% mutate(Resistant = rbinom(n(), Total, Prev), Susceptible = Total - Resistant)
+  
+  # TODO: Replace this with a simple lookup into dt above...
+  tryCatch({
+    fit <- glmer(cbind(Resistant, Susceptible) ~ (1|AMCSpeciesAnimal) + (1|NMD), family='binomial',
+                 data=prev_sub)
+    dt_s$ICC[i] <- icc(fit)["NMD"]
+  },
+  error = function(e) { cat("caught err\n"); dt_s$ICC[i] <- NA},
+  warning = function(e) { cat("caught warn\n"); dt_s$ICC[i] <- NA}
+  )
+
+  dt_s$CV[i] <- prev_sub %>% filter(Antimicrobial=="CIP") %>%
+    group_by(NMD) %>% dplyr::summarize(s = sum(Resistant+Susceptible)) %>%
+    pull(s) %>% cv
+  dt_s$MCS[i] <- prev_sub %>% filter(Antimicrobial=="CIP") %>%
+    group_by(NMD) %>% dplyr::summarize(s = sum(Resistant+Susceptible)) %>%
+    pull(s) %>% mean
+  cat("Done", i, "of", nrow(dt_s), "\n")
+}
+
+# now compute the design effect in each case
+dt_s %>% mutate(Deff = ((CV^2+1)*MCS-1)*ICC + 1) %>% group_by(Species, Animal) %>% summarize(Deff_L = quantile(Deff, 0.1),
+                                                                                           Deff_M = quantile(Deff, 0.5),
+                                                                                           Deff_U = quantile(Deff, 0.9)) %>%
+  left_join(dt %>% mutate(Deff = ((CV^2+1)*MCS-1)*ICC + 1) %>% select(Species, Animal, Deff), by=c("Species", "Animal"))
+
+write.csv(dt_s, "data/design_effect_subsample.csv", row.names=FALSE)
+
+# Some test computations
+dt %>% mutate(MCS2 = MCS*2, Deff = ((CV^2+1)*MCS-1)*ICC + 1, Deff2 = ((CV^2+1)*MCS2-1)*ICC + 1, Incr=Deff2/Deff)
+
+dt_s %>% mutate(Deff = ((CV^2+1)*MCS-1)*ICC + 1) %>% group_by(Species, Animal) %>% summarize(Deff_L = quantile(Deff, 0.1),
+                                                                                             Deff_M = quantile(Deff, 0.5),
+                                                                                             Deff_U = quantile(Deff, 0.9)) %>%
+  left_join(dt %>% mutate(MCS2 = MCS*2, Deff = ((CV^2+1)*MCS-1)*ICC + 1, Deff2 = ((CV^2+1)*MCS2-1)*ICC + 1, Incr=Deff2/Deff) %>% select(Species, Animal, Deff, Deff2), by=c("Species", "Animal"))
+
+
+
+
 # TODO: It seems poultry has a high ICC?? Need to look into this further,
 # and adapt the design effect as needed (way fewer clusters there that
 # are larger, right?)
